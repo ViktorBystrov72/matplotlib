@@ -490,19 +490,30 @@ class Axis(maxis.XAxis):
         tick_in = tick_info['inward_factor'] * tickdelta
         tick_lw = tick_info['linewidth']
         edgep1_tickdir = edgep1[tickdir]
-        out_tickdir = edgep1_tickdir + tick_out
-        in_tickdir = edgep1_tickdir - tick_in
+        # The edge can lie on either side of the box, depending on the view
+        # and axis position. Use its position to orient the requested ticks.
+        tick_length = np.copysign(
+            tick_out + tick_in, edgep1_tickdir - centers[tickdir])
+        tick_offsets = {
+            'in': (0, -tick_length),
+            'out': (tick_length, 0),
+            'inout': (0.5 * tick_length, -0.5 * tick_length),
+        }
 
         default_label_offset = 8.  # A rough estimate
         points = deltas_per_point * deltas
         # All coordinates below are in transformed coordinates for proper projection
         for tick in ticks:
+            tick_kw = self._major_tick_kw if tick._major else self._minor_tick_kw
+            # Keep the 3D defaults unless a direction was set for these ticks.
+            start, end = (tick_offsets[tick.get_tickdir()] if 'tickdir' in tick_kw
+                          else (tick_out, -tick_in))
             # Get tick line positions
             pos = edgep1.copy()
             pos[index] = axis_trans.transform([tick.get_loc()])[0]
-            pos[tickdir] = out_tickdir
+            pos[tickdir] = edgep1_tickdir + start
             x1, y1, z1 = proj3d.proj_transform(*pos, self.axes.M)
-            pos[tickdir] = in_tickdir
+            pos[tickdir] = edgep1_tickdir + end
             x2, y2, z2 = proj3d.proj_transform(*pos, self.axes.M)
 
             # Get position of label

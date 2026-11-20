@@ -1700,6 +1700,67 @@ def test_ax3d_tickcolour():
         assert tick.tick1line._color == 'red'
 
 
+@pytest.mark.parametrize('position, vertical_axis', [
+    ('default', 'z'), ('upper', 'x'), ('lower', 'y'),
+])
+@pytest.mark.parametrize('which', ['major', 'minor'])
+def test_3d_tick_direction(position, vertical_axis, which):
+    fig, ax = plt.subplots(subplot_kw={'projection': '3d', 'proj_type': 'ortho'})
+    ax.view_init(elev=30, azim=-60, vertical_axis=vertical_axis)
+    ax.set(xlim=(1, 0), ylim=(0, 1), zlim=(1, 0))
+    axes = (ax.xaxis, ax.yaxis, ax.zaxis)
+    for axis in axes:
+        axis.set_ticks_position(position)
+        axis.set_ticks([0.5])
+        axis.set_ticks([0.25], minor=True)
+
+    def tick_lines(which):
+        return [
+            getattr(axis, f'get_{which}_ticks')()[0].tick1line.get_xydata().copy()
+            for axis in axes
+        ]
+
+    other = 'minor' if which == 'major' else 'major'
+    fig.canvas.draw()
+    default_lines = tick_lines(which)
+    other_lines = tick_lines(other)
+    lines_by_direction = {}
+    for direction in ('in', 'out', 'inout'):
+        ax.tick_params(which=which, direction=direction)
+        fig.canvas.draw()
+        lines_by_direction[direction] = tick_lines(which)
+        np.testing.assert_array_equal(tick_lines(other), other_lines)
+        for axis in axes:
+            assert axis.get_tick_params(which)['direction'] == direction
+
+    for i, axis in enumerate(axes):
+        mins, maxs, _, highs = axis._get_coord_info()
+        edge, _ = axis._get_axis_line_edge_points(
+            np.where(highs, maxs, mins), np.where(highs, mins, maxs), position)
+        edge[i] = 0.5 if which == 'major' else 0.25
+        across = axis._get_tickdir(position)
+        interior = edge.copy()
+        interior[across] = (mins[across] + maxs[across]) / 2
+        anchor = np.array(proj3d.proj_transform(*edge, ax.M)[:2])
+        toward_inside = np.array(proj3d.proj_transform(*interior, ax.M)[:2]) - anchor
+
+        inward = lines_by_direction['in'][i]
+        outward = lines_by_direction['out'][i]
+        both = lines_by_direction['inout'][i]
+        np.testing.assert_allclose(inward[0], anchor, atol=1e-15)
+        np.testing.assert_allclose(outward[1], anchor, atol=1e-15)
+        assert np.dot(inward[1] - anchor, toward_inside) > 0
+        np.testing.assert_allclose(outward[0] - anchor, anchor - inward[1], atol=1e-15)
+        np.testing.assert_allclose(both[0], (anchor + outward[0]) / 2, atol=1e-15)
+        np.testing.assert_allclose(both[1], (anchor + inward[1]) / 2, atol=1e-15)
+
+    ax.tick_params(which=which, reset=True)
+    fig.canvas.draw()
+    np.testing.assert_array_equal(tick_lines(which), default_lines)
+    for axis in axes:
+        assert 'direction' not in axis.get_tick_params(which)
+
+
 @check_figures_equal()
 def test_ticklabel_format(fig_test, fig_ref):
     axs = fig_test.subplots(4, 5, subplot_kw={"projection": "3d"})

@@ -2116,6 +2116,10 @@ class Axes3D(Axes):
         ambiguous meaning.  For simplicity, the 'z' axis will
         accept settings as if it was like the 'y' axis.
 
+        Set *direction* explicitly to control whether ticks extend inward,
+        outward, or to both sides of the axis line. Without an explicit
+        direction, ticks keep the default 3D appearance.
+
         .. note::
            Axes3D currently ignores some of these settings.
         """
